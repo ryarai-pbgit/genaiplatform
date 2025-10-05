@@ -33,3 +33,4 @@ Thumbs.db
 # Local folders (環境固有の設定)
 helm_local/
 k8s_local/
+tf_local/
