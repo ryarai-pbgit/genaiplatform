@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: langfuse-secrets
+  namespace: genai-platform
+type: Opaque
+stringData:
+  salt: "[YOUR_SALT]"    
+  nextauth-secret: "[YOUR_NEXTAUTH_SECRET]"
+  encryption-key: "[YOUR_ENCRYPTION_KEY]" # openssl rand -hex 32
+  clickhouse-password: "[YOUR_CLICKHOUSE_PASSWORD]"  
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-s3-config
+  namespace: genai-platform
+data:
+  s3disk.xml: |
+    <clickhouse>
+      <merge_tree>
+        <storage_policy>s3</storage_policy>
+      </merge_tree>
+      <storage_configuration>
+        <disks>
+          <s3>
+            <type>object_storage</type>
+            <object_storage_type>s3</object_storage_type>
+            <metadata_type>local</metadata_type>
+            <endpoint>https://[YOUR_S3_ENDPOINT]</endpoint>
+          </s3>
+        </disks>
+        <policies>
+          <s3>
+            <volumes>
+              <main>
+                <disk>s3</disk>
+              </main>
+            </volumes>
+          </s3>
+        </policies>
+      </storage_configuration>
+    </clickhouse>
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: auto-ebs-sc
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+allowedTopologies:
+- matchLabelExpressions:
+  - key: eks.amazonaws.com/compute-type
+    values:
+    - auto
+provisioner: ebs.csi.eks.amazonaws.com
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: gp3
+  encrypted: "true"

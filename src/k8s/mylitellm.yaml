@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-service
+  namespace: genai-platform
+spec:
+  selector:
+    app: litellm
+  ports:
+  - port: 4000
+    targetPort: 4000
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: genai-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: litellm
+  template:
+    metadata:
+      labels:
+        app: litellm
+    spec:
+      containers:
+      - name: litellm
+        image: ghcr.io/berriai/litellm:main-latest
+        ports:
+        - containerPort: 4000
+        args:
+          - "--config"
+          - "/app/config.yaml"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: config
+        configMap:
+          name: litellm-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config
+  namespace: genai-platform
+data:
+  config.yaml: |
+    model_list:
+      - model_name: gpt-4o-mini
+        litellm_params:
+          model: azure/gpt-4o-mini
+          api_base: [YOUR_AZURE_OPENAI_ENDPOINT]
+          api_key: [YOUR_AZURE_OPENAI_API_KEY]
+          api_version: [YOUR_AZURE_OPENAI_API_VERSION]
+    
+    general_settings:
+      master_key: [YOUR_LITELLM_MASTER_KEY]
+      salt_key: [YOUR_LITELLM_SALT_KEY]
+      database_url: postgresql://[YOUR_AURORA_USER]:[YOUR_AURORA_PASSWORD]@[YOUR_AURORA_ENDPOINT]:[YOUR_AURORA_PORT]/langfuse
+      store_model_in_db: true
+      store_prompts_in_spend_logs: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+  namespace: genai-platform
+type: Opaque
+stringData:
+  username: [YOUR_AURORA_USER]
+  password: [YOUR_AURORA_PASSWORD]
+  host: [YOUR_AURORA_ENDPOINT]
+  port: [YOUR_AURORA_PORT]
+  database: "langfuse"

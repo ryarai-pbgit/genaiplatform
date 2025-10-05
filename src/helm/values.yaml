@@ -1,0 +1,129 @@
+# Disable internal services since we're using external AWS services
+postgresql:
+  deploy: false
+
+redis:
+  deploy: false
+
+s3:
+  deploy: false
+
+global:
+ defaultStorageClass: "auto-ebs-sc"
+
+# Enable ClickHouse with S3 storage
+clickhouse:
+  deploy: true
+  shards: 1
+  auth:
+    existingSecret: langfuse-secrets
+    existingSecretKey: clickhouse-password
+  resourcesPreset: medium
+  
+  zookeeper:
+    resources:
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+      requests:
+        cpu: "2"
+        memory: "4Gi"
+  
+# 工事中
+# ServiceAccount configuration for IAM role authentication
+# serviceAccount:
+#   create: true
+#   annotations:
+#     [YOUR_IAM_ROLE_ARN]
+#   name: langfuse-serviceaccount
+
+# Langfuse application configuration
+langfuse:
+  # Resource allocation for production
+  resources:
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+  
+  # Required secrets - reference to Kubernetes secret
+  salt:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: salt
+  
+  nextauth:
+    url:  "[YOUR_LANGFUSE_ALB_URL]"
+    secret:
+      secretKeyRef:
+        name: langfuse-secrets
+        key: nextauth-secret
+  
+  encryptionKey:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: encryption-key
+  
+  # External service configurations
+  additionalEnv:
+  # PostgreSQL (RDS)
+  - name: DATABASE_URL
+    value:
+      postgresql://[YOUR_AURORA_USER]:[YOUR_AURORA_PASSWORD]@[YOUR_AURORA_ENDPOINT]:[YOUR_AURORA_PORT]/langfuse
+  - name: DIRECT_URL
+    value:
+      postgresql://[YOUR_AURORA_USER]:[YOUR_AURORA_PASSWORD]@[YOUR_AURORA_ENDPOINT]:[YOUR_AURORA_PORT]/langfuse
+  # Redis (ElastiCache) - using REDIS_CONNECTION_STRING format
+  - name: REDIS_CONNECTION_STRING
+    value:
+      redis://[YOUR_REDIS_ENDPOINT]:[YOUR_REDIS_PORT]
+  
+  # 工事中
+  # - name: LANGFUSE_INIT_USER_EMAIL
+  #   value: "admin@admin.com"
+  # - name: LANGFUSE_INIT_USER_PASSWORD
+  #   value: "admin123"
+  # NextAuth URL is configured in the nextauth section below
+
+s3:
+  deploy: false
+  storageProvider: "s3"
+  bucket: "[YOUR_LANGFUSE_S3_BUCKET]"
+  region: "[YOUR_AWS_REGION]"
+  eventUpload:
+    enabled: true
+    bucket: "[YOUR_LANGFUSE_S3_BUCKET]"
+    region: "[YOUR_AWS_REGION]"
+  batchExport:
+    enabled: true
+    bucket: "[YOUR_LANGFUSE_S3_BUCKET]"
+    region: "[YOUR_AWS_REGION]"
+  mediaUpload:
+    enabled: true
+    bucket: "[YOUR_LANGFUSE_S3_BUCKET]"
+    region: "[YOUR_AWS_REGION]"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 3000
+
+# Ingress configuration (optional)
+ingress:
+  enabled: false
+  # Uncomment and configure if you want to expose Langfuse externally
+  # className: "nginx"
+  # annotations:
+  #   kubernetes.io/ingress.class: nginx
+  #   cert-manager.io/cluster-issuer: letsencrypt-prod
+  # hosts:
+  #   - host: your-langfuse-domain.com
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+  # tls:
+  #   - secretName: langfuse-tls
+  #     hosts:
+  #       - your-langfuse-domain.com
