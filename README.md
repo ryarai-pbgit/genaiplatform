@@ -4,7 +4,113 @@
 操作する上の基本的な内容（Terraform実行環境の構築、EKSできたら認証とる、とか、そういうこと）は書きません。<br>
 
 ## 1. 構成図
-（作成中）
+Cursor（Mermaid）で作成。随時更新予定。
+```mermaid
+graph TB
+    subgraph "AWS Cloud"
+        subgraph "VPC (10.0.0.0/16)"
+            subgraph "Public Subnets"
+                ALB[Application Load Balancer]
+            end
+            
+            subgraph "Private Subnets"
+                subgraph "EKS Cluster"
+                    subgraph "genai-platform namespace"
+                        LiteLLM[LiteLLM Pod]
+                        LiteLLMSvc[LiteLLM Service]
+                        LiteLLMPV[LiteLLM PV]
+                        
+                        LangfuseWeb[Langfuse Web Pod]
+                        LangfuseWorker[Langfuse Worker Pod]
+                        LangfuseWebSvc[Langfuse Web Service]
+                        LangfusePV[Langfuse PV]
+                        
+                        ClickHouse[ClickHouse Pods]
+                        ClickHousePV[ClickHouse PV]
+                        
+                        Zookeeper[Zookeeper Pods]
+                        ZookeeperSvc[Zookeeper Service]
+                        ZookeeperPV[Zookeeper PV]
+                    end
+                end
+                
+                subgraph "RDS Aurora PostgreSQL"
+                    RDS[(Aurora Cluster)]
+                end
+                
+                subgraph "ElastiCache Redis"
+                    Redis[(Redis Single Node)]
+                end
+            end
+        end
+        
+        subgraph "S3 Storage"
+            S3Langfuse[(Langfuse S3 Bucket)]
+            S3ClickHouse[(ClickHouse S3 Bucket)]
+        end
+    end
+    
+    subgraph "External"
+        User[User/Client]
+        AzureOpenAI[Azure OpenAI]
+    end
+    
+    %% User connections
+    User --> ALB
+    ALB --> LiteLLMSvc
+    LiteLLMSvc --> LiteLLM
+    
+    %% LiteLLM connections
+    LiteLLM --> AzureOpenAI
+    LiteLLM -->|"http://langfuse-web:3000"| LangfuseWebSvc
+    LangfuseWebSvc --> LangfuseWeb
+    
+    %% Langfuse connections
+    LangfuseWeb --> RDS
+    LangfuseWeb --> Redis
+    LangfuseWeb --> S3Langfuse
+    LangfuseWorker --> RDS
+    LangfuseWorker --> Redis
+    LangfuseWorker --> S3Langfuse
+    LangfuseWorker --> ClickHouse
+    
+    %% ClickHouse connections
+    ClickHouse --> S3ClickHouse
+    ClickHouse --> ZookeeperSvc
+    ZookeeperSvc --> Zookeeper
+    
+    %% PV connections
+    LiteLLM --> LiteLLMPV
+    LangfuseWeb --> LangfusePV
+    LangfuseWorker --> LangfusePV
+    ClickHouse --> ClickHousePV
+    Zookeeper --> ZookeeperPV
+    
+    %% IAM Roles positioned near pods
+    LiteLLMRole[LiteLLM IAM Role]
+    LangfuseRole[Langfuse IAM Role]
+    ClickHouseRole[ClickHouse IAM Role]
+    
+    %% Styling
+    classDef aws fill:#ff9900,stroke:#232f3e,stroke-width:2px,color:#fff
+    classDef k8s fill:#326ce5,stroke:#fff,stroke-width:2px,color:#fff
+    classDef storage fill:#3f51b5,stroke:#fff,stroke-width:2px,color:#fff
+    classDef external fill:#4caf50,stroke:#fff,stroke-width:2px,color:#fff
+    classDef coordination fill:#9c27b0,stroke:#fff,stroke-width:2px,color:#fff
+    classDef service fill:#ff5722,stroke:#fff,stroke-width:2px,color:#fff
+    classDef pv fill:#795548,stroke:#fff,stroke-width:2px,color:#fff
+    classDef iam fill:#607d8b,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class ALB,RDS,Redis,S3Langfuse,S3ClickHouse aws
+    class LiteLLM,LangfuseWeb,LangfuseWorker,ClickHouse k8s
+    class S3Langfuse,S3ClickHouse,RDS,Redis storage
+    class User,AzureOpenAI external
+    class Zookeeper coordination
+    class LiteLLMSvc,LangfuseWebSvc service
+    class LiteLLMPV,LangfusePV,ClickHousePV,ZookeeperPV pv
+    class LiteLLMRole,LangfuseRole,ClickHouseRole iam
+```
+
 
 ## 2. 事前準備
  - AWS
