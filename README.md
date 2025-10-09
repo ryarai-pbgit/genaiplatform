@@ -242,9 +242,11 @@ terraform destroy
 参考）https://learn.microsoft.com/ja-jp/azure/api-management/api-management-howto-protect-backend-with-aad#register-an-application-in-microsoft-entra-id-to-represent-the-api
 
 今回は下記を実施。
-- アプリケーションの登録：LiteLLMを登録する
-- クライアントシークレットの払い出し
+- アプリケーションの登録：LiteLLM（リソースAPIとして）を登録する
 - APIの公開、スコープの設定
+
+- アプリケーションの登録：クライアントシステムを想定して登録する
+- こちらはシークレットを払い出し、APIのアクセス許可を設定する
   
 ### 7.2 APIManagementで、Oauth2.0認証
 
@@ -294,6 +296,32 @@ az role assignment create --role "Key Vault Secrets Officer" --assignee "<upn>" 
 
 az keyvault secret set --vault-name "myvault20251009" --name "litellmPassword" --value "{litellm masterkey}"
 ```
+- API ManagementのマネージドIDに、Key Vault Secrets Userロールを付与する。これもポータルだと出てこず（見方が悪いのか）
+```bash
+az role assignment create --role "Key Vault Secrets User" --assignee "<upn>" --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.KeyVault/vaults/<your-unique-keyvault-name>"
+```
+- この状態でAPI Managementの「名前付きの値」を設定する。（上記のロールを付与してから実施しないとうまくいかない、画面上はKey Vault Secrets Userロールも付与しますと出てくるが嘘っぽい）
 
-（今ここまで）
+- ポリシーを書き換えてcurlすると、利用するシステム側にLiteLLMのキーを見せることなく、KeyVaultに登録した状態で認証できることがわかる。
+ポリシーは、tf/doc/litellm_policy.xmlを参照。
+```bash
+（トークン取得は前回と同じため省略）
+
+% curl -X POST "https://myapim2025100921.azure-api.net/v1/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $TOKEN" \
+ -d '{
+   "model": "gpt-4o-mini",
+   "messages": [
+     {
+       "role": "user",
+       "content": "こんにちは！LiteLLMのテストです。"
+     }
+   ]
+ }'
+・・・
+"message":{"content":"こんにちは！LiteLLMのテストですね。何かお手伝いできることがあれば教えてください！"
+・・・
+```
+
 

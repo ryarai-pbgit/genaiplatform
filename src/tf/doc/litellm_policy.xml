@@ -26,9 +26,9 @@
             <message>JWT validation failed: @(context.Variables["validate-jwt-error"])</message>
         </trace>
  
-        <!-- 暫定、ひとまずEntraIDトークンをLiteLLMキーに変換 -->
+        <!-- KeyVaultに格納したLiteLLMキーを名前付きの値から取得してヘッダを書き換え -->
         <set-header name="Authorization" exists-action="override">
-            <value>Bearer {litellm master key}</value>
+            <value>Bearer {{named value name}}</value>
         </set-header>
 
         <set-backend-service base-url="http://{litellm alb domain}}" />
