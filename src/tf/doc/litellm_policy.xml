@@ -1,0 +1,48 @@
+<!--
+    - Policies are applied in the order they appear.
+    - Position <base/> inside a section to inherit policies from the outer scope.
+    - Comments within policies are not preserved.
+-->
+<!-- Add policies as children to the <inbound>, <outbound>, <backend>, and <on-error> elements -->
+<policies>
+    <!-- Throttle, authorize, validate, cache, or transform the requests -->
+    <inbound>
+        <base />
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="401">
+            <openid-config url="https://login.microsoftonline.com/{tenantid}/v2.0/.well-known/openid-configuration" />
+            <audiences>
+                <audience>api://{clientid}</audience>
+            </audiences>
+            <issuers>
+                <issuer>https://sts.windows.net/{tenantid}/</issuer>
+            </issuers>
+            <required-claims>
+                <claim name="aud">
+                    <value>api://{clientid}</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <trace source="validate-jwt-error">
+            <message>JWT validation failed: @(context.Variables["validate-jwt-error"])</message>
+        </trace>
+ 
+        <!-- 暫定、ひとまずEntraIDトークンをLiteLLMキーに変換 -->
+        <set-header name="Authorization" exists-action="override">
+            <value>Bearer {litellm master key}</value>
+        </set-header>
+
+        <set-backend-service base-url="http://{litellm alb domain}}" />
+    </inbound>
+    <!-- Control if and how the requests are forwarded to services  -->
+    <backend>
+        <base />
+    </backend>
+    <!-- Customize the responses -->
+    <outbound>
+        <base />
+    </outbound>
+    <!-- Handle exceptions and customize error responses  -->
+    <on-error>
+        <base />
+    </on-error>
+</policies>

@@ -228,3 +228,72 @@ kubectl patch statefulset langfuse-clickhouse-shard0 -n genai-platform --type='j
 ```bash
 terraform destroy
 ```
+
+## 7. 認証認可統合（EntraID,API Management)検証
+
+検証したい内容は、下記のとおり。段階的に少しずつ動作確認しつつ進める。
+- EntraIDにアプリケーション登録
+- APIManagementで、Oauth2.0認証
+- LiteLLMで仮想キーを払い出してKeyVaultに登録
+- APIManagementで、KeyVaultから登録した仮想キーを取得して、LiteLLMへルーティングする
+
+### 7.1 EntraIDにアプリケーション登録
+下記を参考に設定を行う。<br>
+参考）https://learn.microsoft.com/ja-jp/azure/api-management/api-management-howto-protect-backend-with-aad#register-an-application-in-microsoft-entra-id-to-represent-the-api
+
+今回は下記を実施。
+- アプリケーションの登録：LiteLLMを登録する
+- クライアントシークレットの払い出し
+- APIの公開、スコープの設定
+  
+### 7.2 APIManagementで、Oauth2.0認証
+
+確認のため、下記の簡易設定を実施。<br>
+- LiteLLMのドメインに対して/*へのPOSTのAPIを作成、サブスクリプションキーは除去、製品設定もなし。
+- JWT認証後にLiteLLMキーはポリシー内で書き換える
+
+作成したポリシーは、tf/doc/litellm_policy.xml参照。
+
+### 7.3 ここまでの動作確認
+```bash
+# 環境変数を使用したトークン取得
+TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/$TENANT_ID/oauth2/v2.0/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=$CLIENT_ID" \
+  -d "client_secret=$CLIENT_SECRET" \
+  -d "scope=$SCOPE" \
+  -d "grant_type=client_credentials" | jq -r '.access_token')
+
+# API Management越しにLiteLLMを呼び出し
+curl -X POST "https://myapim20251009.azure-api.net/v1/chat/completions" \
+ -H "Content-Type: application/json" \
+ -H "Authorization: Bearer $TOKEN" \
+ -H "X-Litellm-Key: Bearer sk-1234" \
+ -d '{
+   "model": "gpt-4o-mini",
+   "messages": [
+     {
+       "role": "user",
+       "content": "こんにちは！LiteLLMのテストです。"
+     }
+   ]
+ }'
+・・・
+"message":{"content":"こんにちは！LiteLLMのテストですね。どのようにお手伝いできますか？"
+・・・      
+```
+
+### （実施中）7.4 APIMがKeyVaultから値を取得することの確認
+なぜかポータル経由では、Key Vault Secrets Officerロールが見つからず、CLIにて実施。<br>
+
+- Key Vaultの作成
+```bash
+az keyvault create --name "myvault20251009" --resource-group "myrg" --location "JapanEast"
+
+az role assignment create --role "Key Vault Secrets Officer" --assignee "<upn>" --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.KeyVault/vaults/<your-unique-keyvault-name>"
+
+az keyvault secret set --vault-name "myvault20251009" --name "litellmPassword" --value "{litellm masterkey}"
+```
+
+（今ここまで）
+
