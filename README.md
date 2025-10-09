@@ -285,7 +285,7 @@ curl -X POST "https://myapim20251009.azure-api.net/v1/chat/completions" \
 ・・・      
 ```
 
-### （実施中）7.4 APIMがKeyVaultから値を取得することの確認
+### 7.4 APIMがKeyVaultから値を取得することの確認
 なぜかポータル経由では、Key Vault Secrets Officerロールが見つからず、CLIにて実施。<br>
 
 - Key Vaultの作成
@@ -324,4 +324,4 @@ az role assignment create --role "Key Vault Secrets User" --assignee "<upn>" --s
 ・・・
 ```
 
-
+### （次の課題）7.5 JWTからクライアントIDを取得してそのIDに紐づくKeyVaultシークレットを取得できることを確認する。
