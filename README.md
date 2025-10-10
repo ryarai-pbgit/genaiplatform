@@ -229,35 +229,199 @@ kubectl patch statefulset langfuse-clickhouse-shard0 -n genai-platform --type='j
 terraform destroy
 ```
 
-## 7. 認証認可統合（EntraID,API Management)検証
+## 7. 認証認可統合 EntraID,API Management側の検証
+クライアントにLiteLLMのキーを見せずに認可する、というのが主題。<br>
+API ManagmentでJWT内のクライアントID毎に、動的にKey Vaultに格納されたLiteLLMのキーを取得する、ということを実施。<br>
+実際にこの方式なのかは別途検討が必要<br>
+10/10 １段落したので整理してクロージング<br>
 
-検証したい内容は、下記のとおり。段階的に少しずつ動作確認しつつ進める。
-- EntraIDにアプリケーション登録
-- APIManagementで、Oauth2.0認証
-- LiteLLMで仮想キーを払い出してKeyVaultに登録
-- APIManagementで、KeyVaultから登録した仮想キーを取得して、LiteLLMへルーティングする
+### 7.1 構成図
 
-### 7.1 EntraIDにアプリケーション登録
+```mermaid
+sequenceDiagram
+    participant Client as クライアントアプリ
+    participant EntraID as EntraID
+    participant APIM as API Management
+    participant KV as KeyVault
+    participant LiteLLM as LiteLLM (EKS)
+    participant OpenAI as Azure OpenAI
+
+    Note over Client,OpenAI: 認証認可フロー
+
+    Client->>EntraID: 1. Authorizationヘッダで<br/>クライアントシークレットを提示<br>クライアントアプリは仮想キーを直接見ることはできない
+    EntraID-->>Client: アクセストークンを返却
+
+    Client->>APIM: 2. トークン付きでLiteLLM呼び出し
+
+    APIM->>APIM: 3. JWTトークン検証<br/>クライアントID抽出
+
+    APIM->>KV: 4. クライアントIDをキーとして<br/>仮想キー取得
+    KV-->>APIM: 仮想キーを返却
+
+    APIM->>LiteLLM: 5. 仮想キーでAuthorizationヘッダ<br/>上書きしてルーティング
+
+    LiteLLM->>OpenAI: 6. 仮想キーで認証して<br/>OpenAIへルーティング
+
+    OpenAI-->>LiteLLM: 7. 応答返却
+    LiteLLM-->>APIM: 応答返却
+    APIM-->>Client: 応答返却
+```
+
+### 7.2 EntraIDの設定
 下記を参考に設定を行う。<br>
 参考）https://learn.microsoft.com/ja-jp/azure/api-management/api-management-howto-protect-backend-with-aad#register-an-application-in-microsoft-entra-id-to-represent-the-api
 
 今回は下記を実施。
-- アプリケーションの登録：LiteLLM（リソースAPIとして）を登録する
-- APIの公開、スコープの設定
-
-- アプリケーションの登録：クライアントシステムを想定して登録する
-- こちらはシークレットを払い出し、APIのアクセス許可を設定する
+- LiteLLM（リソースAPI）のアプリケーション登録を行う。APIの公開、スコープの設定を行う。
+- クライアントシステムのアプリケーション登録を行う。シークレットを払い出し、APIのアクセス許可を設定する。
   
-### 7.2 APIManagementで、Oauth2.0認証
+### 7.3 KeyVaultの設定
+- LiteLLMの仮想キーを、名称をEntraのクライアントアプリのクライアントID、 値をLiteLLMの仮想キーとして登録。
+- 登録作業者のユーザにKey Vault Secrets Officer、API ManagementのマネージドIDにKey Vault Secrets Userを割り当て。
 
-確認のため、下記の簡易設定を実施。<br>
-- LiteLLMのドメインに対して/*へのPOSTのAPIを作成、サブスクリプションキーは除去、製品設定もなし。
-- JWT認証後にLiteLLMキーはポリシー内で書き換える
-
-作成したポリシーは、tf/doc/litellm_policy.xml参照。
-
-### 7.3 ここまでの動作確認
 ```bash
+
+# 登録作業用ユーザへのKey Vault Secrets Officerの割り当て
+az role assignment create --role "Key Vault Secrets Officer" --assignee "{作業者のユーザアカウント}" --scope "/subscriptions/{subscriptions}/resourceGroups/{resourceGroups}/providers/Microsoft.KeyVault/vaults/{vault name}"
+
+# シークレットの登録
+az keyvault secret set --vault-name "{vault name}" --name "{クライアントアプリのclient-id}" --value "{litellm key}"
+
+# API ManagementのマネージドIDによるKey Vault Secrets Userの割り当て
+az role assignment create --role "Key Vault Secrets User" --assignee "{API ManagementのマネージドID}" --scope "/subscriptions/{subscriptions}/resourceGroups/{resourceGroups}/providers/Microsoft.KeyVault/vaults/{vault name}"
+
+```
+
+### 7.4 APIManagementの設定
+やはり覚悟はしていたもののポリシーは難しく、正常系だけの簡易実装。<br>
+Named valueが動的参照できず、ビルド時に静的に名前を決めないといけないのも想定外。<br>
+デバッグも大変で、API Management本体の診断設定の他、API毎にもApplication Insightを有効にしないとtraceログが出ませんでした。<br>
+あと、手元に間違ったソースコードを持ってるからか、Cursorも間違えまくって一向に正解に辿り着かず。<br>
+ポリシーでは下記を実装。実際にはJWT検証、JWTパースぐらいまでは確定かなと思ってます。認可君は一応形は確かめた程度で実際にどうするかは要検討。
+- JWTトークン検証
+- JWTからクライアントID（appid）を取得
+- クライアントIDをキーとしてKeyVaultからREST API経由でLiteLLMの仮想キーを取得
+- 仮想キーでAuthorizationヘッダーを書き換え
+- LiteLLMへルーティング
+
+```
+<!--
+    - Policies are applied in the order they appear.
+    - Position <base/> inside a section to inherit policies from the outer scope.
+    - Comments within policies are not preserved.
+-->
+<!-- Add policies as children to the <inbound>, <outbound>, <backend>, and <on-error> elements -->
+<policies>
+    <!-- Throttle, authorize, validate, cache, or transform the requests -->
+    <inbound>
+        <base />
+        <!-- JWTトークン検証 -->
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="401">
+            <openid-config url="https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-configuration" />
+            <audiences>
+                <audience>api://{client-id}</audience>
+            </audiences>
+            <issuers>
+                <issuer>https://sts.windows.net/{tenant-id}/</issuer>
+            </issuers>
+            <required-claims>
+                <claim name="aud">
+                    <value>api://{client-id}</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+
+        <!-- JWTからクライアントID（appid）を取得 -->
+        <set-variable name="client-id" value="@{
+            var authHeader = context.Request.Headers.GetValueOrDefault("Authorization", "");
+            if (authHeader.StartsWith("Bearer "))
+            {
+                var token = authHeader.Substring(7);
+                try
+                {
+                    var parts = token.Split('.');
+                    if (parts.Length == 3)
+                    {
+                        var payload = parts[1];
+                        while (payload.Length % 4 != 0)
+                        {
+                            payload += "=";
+                        }
+                        var json = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String(payload));
+                        var tokenObj = Newtonsoft.Json.Linq.JObject.Parse(json);
+                        return tokenObj["appid"]?.ToString() ?? "";
+                    }
+                }
+                catch
+                {
+                    return "";
+                }
+            }
+            return "";
+        }" />
+
+        <!-- Key Vault URLの設定 -->
+        <set-variable name="keyvault-url" value="@{
+            var clientId = context.Variables.GetValueOrDefault("client-id", "");
+            return "https://{vault-name}.vault.azure.net/secrets/" + clientId + "?api-version=7.6";
+        }" />
+        <!-- client-idをキーとして、Key Vault REST API を呼び出す -->
+        <send-request mode="new" response-variable-name="keyVaultResponse" timeout="20" ignore-error="false">
+            <set-url>@(context.Variables.GetValueOrDefault("keyvault-url", ""))</set-url>
+            <set-method>GET</set-method>
+            <authentication-managed-identity resource="https://vault.azure.net" />
+        </send-request>
+       
+        <!-- シークレット値の抽出とヘッダー設定 -->
+        <choose>
+            <when condition="@(((IResponse)context.Variables["keyVaultResponse"]).StatusCode == 200)">
+                <set-variable name="secretValue" value="@{
+                    try {
+                        var json = ((IResponse)context.Variables["keyVaultResponse"]).Body.As<string>();
+                        var tokenObj = Newtonsoft.Json.Linq.JObject.Parse(json);
+                        return tokenObj["value"]?.ToString() ?? "";
+                    } catch {
+                        return "";
+                    }
+                }" />
+                <set-header name="Authorization" exists-action="override">
+                    <value>@("Bearer " + context.Variables.GetValueOrDefault("secretValue",""))</value>
+                </set-header>
+            </when>
+            <otherwise>
+                <set-header name="Authorization" exists-action="override">
+                    <value>Bearer default-api-key</value>
+                </set-header>
+            </otherwise>
+        </choose>
+
+        <!-- バックエンドサービスの設定 -->
+        <set-backend-service base-url="http://{backend-url}" />
+
+    </inbound>
+    <!-- Control if and how the requests are forwarded to services  -->
+    <backend>
+        <base />
+    </backend>
+    <!-- Customize the responses -->
+    <outbound>
+        <base />
+    </outbound>
+    <!-- Handle exceptions and customize error responses  -->
+    <on-error>
+        <base />
+    </on-error>
+</policies>
+```
+
+### 7.5 動作確認
+```bash
+# 環境変数
+export TENANT_ID="" # テナントID
+export CLIENT_ID="" # クライアントアプリのクライアントID（リソースAPIのクライアントIDではない）
+export CLIENT_SECRET="" # クライアントアプリのクライアントシークレット
+export SCOPE="" # api://リソースAPIのURL/.default
+
 # 環境変数を使用したトークン取得
 TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/$TENANT_ID/oauth2/v2.0/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
@@ -267,10 +431,10 @@ TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/$TENANT_ID/oauth2/v2.
   -d "grant_type=client_credentials" | jq -r '.access_token')
 
 # API Management越しにLiteLLMを呼び出し
+# ここにLiteLLMキーがないことが今回の狙い
 curl -X POST "https://myapim20251009.azure-api.net/v1/chat/completions" \
  -H "Content-Type: application/json" \
  -H "Authorization: Bearer $TOKEN" \
- -H "X-Litellm-Key: Bearer sk-1234" \
  -d '{
    "model": "gpt-4o-mini",
    "messages": [
@@ -282,46 +446,6 @@ curl -X POST "https://myapim20251009.azure-api.net/v1/chat/completions" \
  }'
 ・・・
 "message":{"content":"こんにちは！LiteLLMのテストですね。どのようにお手伝いできますか？"
-・・・      
-```
-
-### 7.4 APIMがKeyVaultから値を取得することの確認
-なぜかポータル経由では、Key Vault Secrets Officerロールが見つからず、CLIにて実施。<br>
-
-- Key Vaultの作成
-```bash
-az keyvault create --name "myvault20251009" --resource-group "myrg" --location "JapanEast"
-
-az role assignment create --role "Key Vault Secrets Officer" --assignee "<upn>" --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.KeyVault/vaults/<your-unique-keyvault-name>"
-
-az keyvault secret set --vault-name "myvault20251009" --name "litellmPassword" --value "{litellm masterkey}"
-```
-- API ManagementのマネージドIDに、Key Vault Secrets Userロールを付与する。これもポータルだと出てこず（見方が悪いのか）
-```bash
-az role assignment create --role "Key Vault Secrets User" --assignee "<upn>" --scope "/subscriptions/<subscription-id>/resourceGroups/<resource-group-name>/providers/Microsoft.KeyVault/vaults/<your-unique-keyvault-name>"
-```
-- この状態でAPI Managementの「名前付きの値」を設定する。（上記のロールを付与してから実施しないとうまくいかない、画面上はKey Vault Secrets Userロールも付与しますと出てくるが嘘っぽい）
-
-- ポリシーを書き換えてcurlすると、利用するシステム側にLiteLLMのキーを見せることなく、KeyVaultに登録した状態で認証できることがわかる。
-ポリシーは、tf/doc/litellm_policy.xmlを参照。
-```bash
-（トークン取得は前回と同じため省略）
-
-% curl -X POST "https://myapim2025100921.azure-api.net/v1/chat/completions" \
- -H "Content-Type: application/json" \
- -H "Authorization: Bearer $TOKEN" \
- -d '{
-   "model": "gpt-4o-mini",
-   "messages": [
-     {
-       "role": "user",
-       "content": "こんにちは！LiteLLMのテストです。"
-     }
-   ]
- }'
-・・・
-"message":{"content":"こんにちは！LiteLLMのテストですね。何かお手伝いできることがあれば教えてください！"
 ・・・
 ```
 
-### （次の課題）7.5 JWTからクライアントIDを取得してそのIDに紐づくKeyVaultシークレットを取得できることを確認する。

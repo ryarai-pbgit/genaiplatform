@@ -8,30 +8,89 @@
     <!-- Throttle, authorize, validate, cache, or transform the requests -->
     <inbound>
         <base />
+        <!-- JWTトークン検証 -->
         <validate-jwt header-name="Authorization" failed-validation-httpcode="401">
-            <openid-config url="https://login.microsoftonline.com/{tenantid}/v2.0/.well-known/openid-configuration" />
+            <openid-config url="https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-configuration" />
             <audiences>
-                <audience>api://{clientid}</audience>
+                <audience>api://{client-id}</audience>
             </audiences>
             <issuers>
-                <issuer>https://sts.windows.net/{tenantid}/</issuer>
+                <issuer>https://sts.windows.net/{tenant-id}/</issuer>
             </issuers>
             <required-claims>
                 <claim name="aud">
-                    <value>api://{clientid}</value>
+                    <value>api://{client-id}</value>
                 </claim>
             </required-claims>
         </validate-jwt>
-        <trace source="validate-jwt-error">
-            <message>JWT validation failed: @(context.Variables["validate-jwt-error"])</message>
-        </trace>
- 
-        <!-- KeyVaultに格納したLiteLLMキーを名前付きの値から取得してヘッダを書き換え -->
-        <set-header name="Authorization" exists-action="override">
-            <value>Bearer {{named value name}}</value>
-        </set-header>
 
-        <set-backend-service base-url="http://{litellm alb domain}}" />
+        <!-- JWTからクライアントID（appid）を取得 -->
+        <set-variable name="client-id" value="@{
+            var authHeader = context.Request.Headers.GetValueOrDefault("Authorization", "");
+            if (authHeader.StartsWith("Bearer "))
+            {
+                var token = authHeader.Substring(7);
+                try
+                {
+                    var parts = token.Split('.');
+                    if (parts.Length == 3)
+                    {
+                        var payload = parts[1];
+                        while (payload.Length % 4 != 0)
+                        {
+                            payload += "=";
+                        }
+                        var json = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String(payload));
+                        var tokenObj = Newtonsoft.Json.Linq.JObject.Parse(json);
+                        return tokenObj["appid"]?.ToString() ?? "";
+                    }
+                }
+                catch
+                {
+                    return "";
+                }
+            }
+            return "";
+        }" />
+
+
+        <set-variable name="keyvault-url" value="@{
+            var clientId = context.Variables.GetValueOrDefault("client-id", "");
+            return "https://{vault-name}.vault.azure.net/secrets/" + clientId + "?api-version=7.6";
+        }" />
+        <!-- client-idをキーとして、Key Vault REST API を呼び出す -->
+        <send-request mode="new" response-variable-name="keyVaultResponse" timeout="20" ignore-error="false">
+            <set-url>@(context.Variables.GetValueOrDefault("keyvault-url", ""))</set-url>
+            <set-method>GET</set-method>
+            <authentication-managed-identity resource="https://vault.azure.net" />
+        </send-request>
+       
+        <!-- シークレット値の抽出とヘッダー設定 -->
+        <choose>
+            <when condition="@(((IResponse)context.Variables["keyVaultResponse"]).StatusCode == 200)">
+                <set-variable name="secretValue" value="@{
+                    try {
+                        var json = ((IResponse)context.Variables["keyVaultResponse"]).Body.As<string>();
+                        var tokenObj = Newtonsoft.Json.Linq.JObject.Parse(json);
+                        return tokenObj["value"]?.ToString() ?? "";
+                    } catch {
+                        return "";
+                    }
+                }" />
+                <set-header name="Authorization" exists-action="override">
+                    <value>@("Bearer " + context.Variables.GetValueOrDefault("secretValue",""))</value>
+                </set-header>
+            </when>
+            <otherwise>
+                <set-header name="Authorization" exists-action="override">
+                    <value>Bearer default-api-key</value>
+                </set-header>
+            </otherwise>
+        </choose>
+
+        <!-- バックエンドサービスの設定 -->
+        <set-backend-service base-url="http://{backend-url}" />
+
     </inbound>
     <!-- Control if and how the requests are forwarded to services  -->
     <backend>
