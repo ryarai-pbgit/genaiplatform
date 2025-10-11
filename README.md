@@ -1,9 +1,38 @@
 # GenAI Platform Infrastructure
 
+> **⚠️ 注意事項**
+> - スキルセット的に信じられないぐらいのボトムアップアプローチです。ご了承ください。
+> - 試行した時系列順に書き足しているため、前の章で変なこと書いても後の章で打ち消したりしています。 
+
 検証用サーバ環境構築の過程など<br>
 操作する上の基本的な内容（Terraform実行環境の構築、EKSできたら認証とる、とか、そういうこと）は書きません。<br>
 
-## 1. 構成図
+## 目次
+- [1. 構成図（2025/10/05）](#1-構成図20251005)
+- [2. 事前準備（2025/10/05）](#2-事前準備20251005)
+- [3. AWSリソースの構築（2025/10/05）](#3-awsリソースの構築20251005)
+- [4. LiteLLMデプロイ（2025/10/05）](#4-litellmデプロイ20251005)
+  - [4.1 k8s名前空間を作成](#41-k8s名前空間を作成)
+  - [4.2 LiteLLM立ち上げ](#42-litellm立ち上げ)
+  - [4.3 Ingress立ち上げ](#43-ingress立ち上げ)
+  - [4.4 動作確認](#44-動作確認)
+- [5. Langfuseデプロイ（2025/10/05）](#5-langfuseデプロイ20251005)
+  - [5.1 Langfuse用のSecret、ConfigMap、StorageClass](#51-langfuse用のsecretconfigmapstorageclass)
+  - [5.2 Helmでインストール](#52-helmでインストール)
+  - [5.3 事後作業](#53-事後作業)
+  - [5.4 動作確認＆LiteLLM連結](#54-動作確認litellm連結)
+- [6. 1日の終わりに必ず実施すること](#6-1日の終わりに必ず実施すること)
+- [7. 認証認可統合 EntraID,API Management側の検証（2025/10/10）](#7-認証認可統合-entraidapi-management側の検証20251010)
+  - [7.1 構成図](#71-構成図)
+  - [7.2 EntraIDの設定](#72-entraidの設定)
+  - [7.3 KeyVaultの設定](#73-keyvaultの設定)
+  - [7.4 APIManagementの設定](#74-apimanagementの設定)
+  - [7.5 動作確認](#75-動作確認)
+- [8. LiteLLMのDBを確認する（2025/10/11）](#8-litellmのdbを確認する20251011)
+  - [8.1 テーブル定義](#81-テーブル定義)
+  - [8.2 考察](#82-考察)
+
+## 1. 構成図（2025/10/05）
 Cursor（Mermaid）で作成。随時更新予定。
 ```mermaid
 graph TB
@@ -112,7 +141,7 @@ graph TB
 ```
 
 
-## 2. 事前準備
+## 2. 事前準備（2025/10/05）
  - AWS
  - Terraform
  - kubectl
@@ -120,13 +149,13 @@ graph TB
  - Azure OpenAI （例：gpt-4o-miniをデプロイ）
  - （Option）コーディングAI（例：Github Coplot, Cursor）
 
-## 3. AWSリソースの構築
+## 3. AWSリソースの構築（2025/10/05）
 src/のtfファイルをご参照。随時更新。<br>
 EKS Auto Mode、Aurora、Redis、S3、IAM、VPCなど<br>
 エンタ押すだけ、15分ぐらい。<br>
 検証用のためセキュアでも何でもない（あまりそこはやらない予定）<br>
 
-## 4. LiteLLMデプロイ
+## 4. LiteLLMデプロイ（2025/10/05）
 以降、まだかなり手動作業残る状態。徐々にコツコツ改善予定。<br>
 
 ### 4.1 k8s名前空間を作成。
@@ -167,7 +196,7 @@ kubectl apply -f k8s/myingress.yaml
   }'
  ```
 
-## 5. Langfuseデプロイ
+## 5. Langfuseデプロイ（2025/10/05）
 まだまだ手動手順が残る状況。徐々に改善予定。<br>
 
 ### 5.1 Langfuse用のSecret、ConfigMap、StorageClass
@@ -191,7 +220,7 @@ helm install langfuse langfuse/langfuse -n genai-platform -f helm/values.yaml
 helm uninstall langfuse -n genai-platform
 ```
 
-### 5.3 事後作業（工事中）
+### 5.3 事後作業
 現時点で残ってしまっている残作業<br>
 その１）サービスアカウントへのアノテーション付与<br>
 helmインストールではできず、手動になっている。<br>
@@ -229,13 +258,13 @@ kubectl patch statefulset langfuse-clickhouse-shard0 -n genai-platform --type='j
 terraform destroy
 ```
 
-## 7. 認証認可統合 EntraID,API Management側の検証
+## 7. 認証認可統合 EntraID,API Management側の検証（2025/10/10）
 クライアントにLiteLLMのキーを見せずに認可する、というのが主題。<br>
 API ManagmentでJWT内のクライアントID毎に、動的にKey Vaultに格納されたLiteLLMのキーを取得する、ということを実施。<br>
 実際にこの方式なのかは別途検討が必要<br>
 10/10 １段落したので整理してクロージング<br>
 
-### 7.1 構成図
+### 7.1 シーケンス図（2025/10/10）
 
 ```mermaid
 sequenceDiagram
@@ -449,7 +478,7 @@ curl -X POST "https://myapim20251009.azure-api.net/v1/chat/completions" \
 ・・・
 ```
 
-## 8. LiteLLMのDB関連
+## 8. LiteLLMのDBを確認する（2025/10/11）
 
 ### 8.1 テーブル定義
 prismaファイルが下記に公開されているので、Cursorにテーブル定義とER図を作ってもらう。<br>
@@ -459,4 +488,47 @@ LiteLLMのDBスキーマやER図については、以下のドキュメントも
 - [LiteLLM データベーススキーマ (database_schema.md)](src/doc/database_schema.md)
 - [LiteLLM データベース ER図 (er_diagram.md)](src/doc/er_diagram.md)
 
+### 8.2 考察、シーケンス図修正
+随筆
+- ER図を見ると、ユーザとキーは１対他なので、７章でやったようなことは出来なさそう（ユーザ毎に仮想キーは1つではない）
+- やはりユーザ側からキーを指定してもらう必要があり、LiteLLM側ではカスタムヘッダでEntraIDのトークンとは別のヘッダでキーを受け取る
+- 認可君みたいなものは不要でAPI ManagementはEntraのJWT検証のみ
+- 何か特別な要件があればKeyVault、Named Valueあたりは使うことがあるかもしれない。動的にKeyVaultからREST APIで取るのはあまりやりたくない。
+```mermaid
+sequenceDiagram
+    participant Client as クライアントアプリ
+    participant EntraID as EntraID
+    participant APIM as API Management
+    participant LiteLLM as LiteLLM (EKS)
+    participant LLM as LLM
 
+    Note over Client,LLM: 認証認可フロー
+
+    Client->>EntraID: 1. Authorizationヘッダで<br/>EntraIDのクライアントシークレットを提示
+
+    EntraID-->>Client: アクセストークンを返却
+
+    Client->>APIM: 2. トークン付きでLiteLLM呼び出し<br>LiteLLMのカスタムヘッダには仮想キーを指定する。
+
+    APIM->>APIM: 3. JWTトークン検証
+    
+    APIM->>LiteLLM: 4. LiteLLMへルーティング
+
+    LiteLLM->>LLM: 5. 仮想キーで認証して<br/>LLMへルーティング
+    LLM-->>LiteLLM: 6. 応答返却
+    LiteLLM-->>APIM: 7.応答返却
+    APIM-->>Client: 8.応答返却
+```
+
+## 9. 簡単なデモ（2025/10/11）
+- クライアントアプリをStreamlitで作成
+- LLMは、Azureのgpt-4o-miniとGoogleのgemini/gemini-2.0-flash-liteを準備
+- AWS上でTerraformしてLiteLLMを起動
+- 仮想キーを払い出して、仮想キーを指定した場合は、gemini-2.0-flash-liteが使えない設定
+- マスターキーを指定した場合は、両方使える、という状態。
+
+### 9.1 Streamlitのコード
+ソースコードはこちら
+- [Streamlitソースコード](src/python/chat_app.py)
+
+### 9.2 
