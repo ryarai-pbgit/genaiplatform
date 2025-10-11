@@ -53,7 +53,7 @@
             return "";
         }" />
 
-
+        <!-- Key Vault URLの設定 -->
         <set-variable name="keyvault-url" value="@{
             var clientId = context.Variables.GetValueOrDefault("client-id", "");
             return "https://{vault-name}.vault.azure.net/secrets/" + clientId + "?api-version=7.6";

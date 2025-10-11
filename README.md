@@ -449,3 +449,14 @@ curl -X POST "https://myapim20251009.azure-api.net/v1/chat/completions" \
 ・・・
 ```
 
+## 8. LiteLLMのDB関連
+
+### 8.1 テーブル定義
+prismaファイルが下記に公開されているので、Cursorにテーブル定義とER図を作ってもらう。<br>
+https://github.com/BerriAI/litellm/blob/main/schema.prisma<br>
+LiteLLMのDBスキーマやER図については、以下のドキュメントも参照してください。
+
+- [LiteLLM データベーススキーマ (database_schema.md)](../doc/database_schema.md)
+- [LiteLLM データベース ER図 (er_diagram.md)](../doc/er_diagram.md)
+
+
