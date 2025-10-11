@@ -456,7 +456,7 @@ prismaファイルが下記に公開されているので、Cursorにテーブ�
 https://github.com/BerriAI/litellm/blob/main/schema.prisma<br>
 LiteLLMのDBスキーマやER図については、以下のドキュメントも参照してください。
 
-- [LiteLLM データベーススキーマ (database_schema.md)](../doc/database_schema.md)
-- [LiteLLM データベース ER図 (er_diagram.md)](../doc/er_diagram.md)
+- [LiteLLM データベーススキーマ (database_schema.md)](doc/database_schema.md)
+- [LiteLLM データベース ER図 (er_diagram.md)](doc/er_diagram.md)
 
 
