@@ -22,14 +22,22 @@
   - [5.4 動作確認＆LiteLLM連結](#54-動作確認litellm連結)
 - [6. 1日の終わりに必ず実施すること](#6-1日の終わりに必ず実施すること)
 - [7. 認証認可統合 EntraID,API Management側の検証（2025/10/10）](#7-認証認可統合-entraidapi-management側の検証20251010)
-  - [7.1 構成図](#71-構成図)
+  - [7.1 シーケンス図（2025/10/10）](#71-シーケンス図20251010)
   - [7.2 EntraIDの設定](#72-entraidの設定)
   - [7.3 KeyVaultの設定](#73-keyvaultの設定)
   - [7.4 APIManagementの設定](#74-apimanagementの設定)
   - [7.5 動作確認](#75-動作確認)
 - [8. LiteLLMのDBを確認する（2025/10/11）](#8-litellmのdbを確認する20251011)
   - [8.1 テーブル定義](#81-テーブル定義)
-  - [8.2 考察](#82-考察)
+  - [8.2 考察、シーケンス図修正](#82-考察シーケンス図修正)
+- [9. 簡単なデモ（2025/10/11）](#9-簡単なデモ20251011)
+  - [9.1 Streamlitのコード](#91-streamlitのコード)
+  - [9.2 ビデオ](#92-ビデオ)
+- [10. Langfuseの使い方（2025/10/12）](#10-langfuseの使い方20251012)
+  - [10.1 テーブル定義とER](#101-テーブル定義とer)
+  - [10.2 LiteLLMとLangfuseを統合した場合](#102-litellmとlangfuseを統合した場合)
+  - [10.3 開発用途としてLangfuseの使い方](#103-開発用途としてlangfuseの使い方)
+  - [10.4 Langfuseのプロジェクト案](#104-langfuseのプロジェクト案)
 
 ## 1. 構成図（2025/10/05）
 Cursor（Mermaid）で作成。随時更新予定。
@@ -484,8 +492,8 @@ prismaファイルが下記に公開されているので、Cursorにテーブ�
 https://github.com/BerriAI/litellm/blob/main/schema.prisma<br>
 LiteLLMのDBスキーマやER図については、以下のドキュメントも参照してください。
 
-- [LiteLLM データベーススキーマ (database_schema.md)](src/doc/database_schema.md)
-- [LiteLLM データベース ER図 (er_diagram.md)](src/doc/er_diagram.md)
+- [LiteLLM データベーススキーマ (database_schema.md)](src/doc/litellm/database_schema.md)
+- [LiteLLM データベース ER図 (er_diagram.md)](src/doc/litellm/er_diagram.md)
 
 ### 8.2 考察、シーケンス図修正
 随筆
@@ -532,3 +540,41 @@ sequenceDiagram
 
 ### 9.2 ビデオ
 [![デモ動画](images/test.gif)]()
+
+## 10. Langfuseの使い方（2025/10/12）
+
+### 10.1 テーブル定義とER
+LiteLLMと同じようにCursor氏に作成いただきました。
+- [Langfuse データベーススキーマ (database_schema.md)](src/doc/langfuse/database_schema.md)
+- [Langfuse データベース ER図 (er_diagram.md)](src/doc/langfuse/er_diagram.md)
+
+### 10.2 LiteLLMとLangfuseを統合した場合
+全てのログがLangfuseに流れる形になる。Langfuse側で専用のプロジェクトを作ってそこで全て受ける形になる想定。<br>
+全てのログが流れるため特定の開発者がガンガン使うというのは難しく、運用上のログ可視化、もしくは、デバッグ用途、となりそう。<br>
+例えば、チャットの同一セッションのログをLiteLLMで見ると、下記のように同一セッションであることはわかりにくい。
+- チャットの同一セッションのログ表示例：
+![セッションログ例（litellm_session_log.png）](images/litellm_session_log.png)
+- Langfuseの方では下記のように見える。
+![セッションログ例（langfuse_session_log.png）](images/langfuse_session_log.png)
+
+### 10.3 開発用途としてLangfuseの使い方
+Langfuseで個別にプロジェクトを作成し、エンドポイントを開発者に公開、クライアントのSDKから直接呼んでもらうのが良いのではないかと考える。<br>
+実際の運用環境では、チューニングしている間だけの期間限定とか、そういう感じになると思われるが（やはり申請承認が必要そう）、フル活用いただいて早期にチューニングを完了していただく方がAIエージェント開発の世界では良い気がしている。<br>
+こちらの検証環境でも、litellmとは別プロジェクトを作成し、クライアントから呼び出すことができることを試した。<br>
+ソースコードは前章のstreamlitを改変し、オンオフを切り替えられるようにしている。<br>
+
+- [src/python/litellm-chat-app/chat_app.py](src/python/litellm-chat-app/chat_app.py)
+
+![アプリケーションの例（streamlit.png）](images/streamlit.png)
+
+### 10.4 Langfuseのプロジェクト案
+現時点では、上記の内容を踏まえて下記のように想定。
+
+| 用途                  | 接続対象                      | 備考                           |
+|---------------------|-----------------------|-------------------------------|
+| 本番運用ログ用      | LiteLLM本番経由のLLMのすべての本番呼び出しを記録 | 運用状況の確認やトラブル対応 |
+|本番環境でのチューニング用（個別払い出し）| 期間限定で個別払い出し、クライアントSDKで直撃いただく。定のアプリケーションのログのみを記録 | 本番環境でしかできないチューニングなど、目的もなく与えない、申請承認制|
+
+
+
+
