@@ -592,6 +592,6 @@ AgentCoreなどのドキュメントを見る限り、MCPサーバーから見�
 - オンプレミスのファイルサーバみたいなものはSaaSにデータ移送、もしくは、それができないぐらい機密なのであれば、チャットに手動で都度投下、
 となってほしい。。
 
-
-
-
+### 11.1 Agent Core Gatewayの探索
+分けてこちらで実施中（2025/10/19）<br>
+https://github.com/ryarai-pbgit/awsagentcoretest
