@@ -595,3 +595,35 @@ AgentCoreなどのドキュメントを見る限り、MCPサーバーから見�
 ### 11.1 Agent Core Gatewayの探索
 分けてこちらで実施中（2025/10/19）<br>
 https://github.com/ryarai-pbgit/awsagentcoretest
+
+## 12. Azure API ManagementのAI Gateway（2025/10/28）
+少し試行してみたので、LiteLLMと比較して何点か記載。<br>
+
+- gpt-4o-miniとgeminiを登録<br>
+エンドポイントの統合という機能は無い。<br>
+一回の設定で全てのAPIが自動的に登録されました。<br>
+全体一括、もしくは、API個別で、従来のAPIManagementと同様の制御ができる。<br>
+LiteLLMより細かく制御はできる（ニーズがあるかは微妙）<br>
+OpenAIエンドポイントの例：  
+  [![apim_openaiの図](images/apim_openai.png)](images/apim_openai.png)
+Geminiエンドポイントの例：  
+  [![apim_geminiの図](images/apim_gemini.png)](images/apim_gemini.png)
+
+- ロードバランサー、サーキットブレーカー<br>
+LLMのデプロイメントをIaaSとして扱うかの如く設定が可能。<br>
+負荷分散アルゴリズムは少し違うように思いますが、LiteLLMとほぼ同等の設定が可能。<br>
+バックエンドの設定例：  
+[![apim_backendの図](images/apim_backend.png)](images/apim_backend.png)
+サーキットブレーカーの設定例：  
+[![circuitbreakerの図](images/apim_circuitbreaker.png)](images/apim_circuitbreaker.png)
+
+- ログ<br>
+Kustoのクエリを組むことで見れるには見れる。（ただし、このクエリが紹介されている公式ドキュメントの記載が間違っている。10/28時点）<br>
+LiteLLMよりも原始的な構造。開発やデバッグで利用するためには、別のツールが必要になる。<br>
+![apim_logの出力例はこちら](images/apim_log.png)
+
+- 利用状況サマリ<br>
+全体的なサマリ情報がグラフ表示される。見た目はLiteLLMともそう変わらない感じではある。<br>
+実務で利用するのかはよくわからない。<br>
+  [![apim_analyticsの図](images/apim_analytics.png)](images/apim_analytics.png)
+
