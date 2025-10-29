@@ -627,3 +627,38 @@ LiteLLMよりも原始的な構造。開発やデバッグで利用するため�
 実務で利用するのかはよくわからない。<br>
   [![apim_analyticsの図](images/apim_analytics.png)](images/apim_analytics.png)
 
+## 13. Azure Databricks Mosaic AI Gateway（2025/10/28）
+Databricks Mosaic AI Gatewayも試行してみたので何点か記載。<br>
+
+- gpt-4o-miniとgeminiを登録<br>
+稼働確認のため50%ずつ振り分けるという通常あり得ない設定かもしれません。<br>
+現実には、OpenAI系のバージョン違い、Geminiのバージョン違いをまとめてそれ毎にゲートウェイを作る形かと思います。<br>
+今回はGUIで実施していますが、notebook経由でpythonのプログラム、Jsonの定義で登録も可能。
+![db_openai](images/db_openai.png)
+![db_gemini](images/db_gemini.png)
+
+すぐに使えるようになっていて、他の内蔵モデルと比較してみたりできました。
+![db_playground](images/db_playground.png)
+
+- ロードバランサー、サーキットブレーカー<br>
+ロードバランシングは、トラフィックスプリッティングで、各モデルに割り当てるトラフィックの割合を指定する形でした。<br>
+おそらくラウンドロビンで、以外のアルゴリズムは設定することができませんでした。<br>
+フォールバックは、AI Gatewayセクションで「Enable fallbacks」を選択し、フォールバック先となるモデルを指定することで、トラフィック割合を0%に設定することで、通常はリクエストを受けず、障害時のみ利用されます。<br>
+
+- ログ<br>
+推論テーブルの中に入っていました。下記のように参照可能です。
+![db_log](images/db_log.png)
+
+- 利用状況サマリ<br>
+GithubからダッシュボードのサンプルJSONをダウンロードして、ダッシュボードで読み込んでね、とのことでした。<br>
+権限の問題で参照できませんでしたが、内部的にはusage trackingやpayload loggingというテーブルに格納されているようで、コストや利用状況の可視化はできるようです。
+
+その他<br>
+- MCPサーバ：マネージドMCPサーバー、外部MCPサーバー、カスタムMCPサーバーの３種類をサポート（ベータ版とあり利用はできず）<br>
+ 内容的にMCPゲートウェイと思われます。<br>
+ https://learn.microsoft.com/ja-jp/azure/databricks/generative-ai/mcp/#databricks-mcp-options<br>
+
+- エージェント実行環境：Databricks Model Serving上で稼働します。Model ServingはDatabricksが提供するマネージドな推論基盤であり、エージェントのリクエスト処理やスケーリング、監視などを自動的に行います。デプロイ後は、AI Gatewayの推論テーブルやMLflowのトレース機能を使って、リクエストやレスポンス、エージェントの挙動をリアルタイムで監視・デバッグできます。とのこと。by databricks内のAIより<br>
+
+- 独自モデルの学習環境など：生成AI向けmlflowがマネージドで提供されるため、トレーニングやサービングに必要な機能が一式利用可能。<br>
+
