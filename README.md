@@ -664,3 +664,22 @@ GithubからダッシュボードのサンプルJSONをダウンロードして�
 
 - 独自モデルの学習環境など：生成AI向けmlflowがマネージドで提供されるため、トレーニングやサービングに必要な機能が一式利用可能。<br>
 
+## 14. SnowflakeのAI関連機能
+
+SnowflakeのAI関連機能について、動作確認したくなったものについて記載。
+
+### 14.1 AI Observability
+
+https://www.snowflake.com/en/developers/guides/getting-started-with-ai-observability/
+
+- 詳細な手順やサンプルノートブックは [src/notebook/OBSERVABILITY.ipynb](src/notebook/OBSERVABILITY.ipynb) に格納しています。参照ください。
+
+評価画面の様子はこちら
+
+![OBSERVABILITY](images/Observability.png "OBSERVABILITY")
+
+評価画面. 詳細画面の様子はこちら
+
+![OBSERVABILITY_Detail](images/Observability_Detail.png "OBSERVABILITY_Detail")
+
+
