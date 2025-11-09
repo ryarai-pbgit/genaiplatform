@@ -42,6 +42,9 @@
 - [11. MCPの認証認可について（2025/10/13）](#11-mcpの認証認可について20251013)
 - [12. Azure API ManagementのAI Gateway（2025/10/28）](#12-azure-api-managementのai-gateway20251028)
 - [13. Azure Databricks Mosaic AI Gateway（2025/10/28）](#13-azure-databricks-mosaic-ai-gateway20251028)
+- [14. SnowflakeのAI関連機能（2025/11/09）](#14-snowflakeのai関連機能20251109)
+  - [14.1 AI Observability](#141-ai-observability)
+  - [14.2 API Management AI GatewayにSnowflakeを接続する](#142-api-management-ai-gatewayにsnowflakeを接続する)
 
 ## 0. 事前調査（2025/09/20）
 [事前調査](./chapter0/README.md)
@@ -664,7 +667,7 @@ GithubからダッシュボードのサンプルJSONをダウンロードして�
 
 - 独自モデルの学習環境など：生成AI向けmlflowがマネージドで提供されるため、トレーニングやサービングに必要な機能が一式利用可能。<br>
 
-## 14. SnowflakeのAI関連機能
+## 14. SnowflakeのAI関連機能（2025/11/09）
 
 SnowflakeのAI関連機能について、動作確認したくなったものについて記載。
 
@@ -680,7 +683,7 @@ https://www.snowflake.com/en/developers/guides/getting-started-with-ai-observabi
 
 評価画面. 詳細画面の様子はこちら
 
-![OBSERVABILITY_Detail](images/Observability_Detail.png "OBSERVABILITY_Detail")
+![OBSERVABILITY_Detail](images/Observability_detail.png "OBSERVABILITY_Detail")
 
 ### 14.2 API Management AI GatewayにSnowflakeを接続する
 
